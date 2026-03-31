@@ -1,0 +1,24 @@
+# ComfyUI portable installation
+ComfyUI_windows_portable/
+
+# Generated output
+output/
+
+# Windows artifacts
+nul
+Thumbs.db
+Desktop.ini
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Environment
+.env
+.venv/
+venv/
