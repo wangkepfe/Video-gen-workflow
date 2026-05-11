@@ -2,8 +2,8 @@
 setlocal enabledelayedexpansion
 
 echo ============================================================
-echo   Model Downloader — FLUX.1 Dev FP8 + Wan2.2 5B TI2V
-echo   Total download: ~33 GB
+echo   Model Downloader - FLUX.1 Dev FP8 + Wan2.2 14B I2V (MoE)
+echo   Total download: ~50 GB (FLUX 17 + 2x14B + UMT5 5 + VAE)
 echo ============================================================
 echo.
 
@@ -32,7 +32,7 @@ set "FAIL=0"
 REM -------------------------------------------------------
 REM  FLUX.1 Dev FP8 checkpoint (17.2 GB)
 REM -------------------------------------------------------
-echo [1/4] FLUX.1 Dev FP8 checkpoint (17.2 GB)
+echo [1/5] FLUX.1 Dev FP8 checkpoint (17.2 GB)
 set "F1=%CHECKPOINTS%\flux1-dev-fp8.safetensors"
 if exist "%F1%" (
     echo       Already exists, skipping.
@@ -51,16 +51,16 @@ if exist "%F1%" (
 echo.
 
 REM -------------------------------------------------------
-REM  Wan2.2 TI2V 5B diffusion model (10.7 GB)
+REM  Wan2.2 I2V 14B HIGH-NOISE expert fp8 (~14 GB)
 REM -------------------------------------------------------
-echo [2/4] Wan2.2 TI2V 5B diffusion model (10.7 GB)
-set "F2=%DIFFUSION%\wan2.2_ti2v_5B_fp16.safetensors"
+echo [2/5] Wan2.2 I2V 14B high-noise expert fp8 (~14 GB)
+set "F2=%DIFFUSION%\wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors"
 if exist "%F2%" (
     echo       Already exists, skipping.
 ) else (
     echo       Downloading...
     curl -L -C - --progress-bar -o "%F2%.tmp" ^
-        "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/diffusion_models/wan2.2_ti2v_5B_fp16.safetensors"
+        "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/diffusion_models/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors"
     if !errorlevel! neq 0 (
         echo       [WARN] Download failed or incomplete. Re-run this script to resume.
         set "FAIL=1"
@@ -72,16 +72,16 @@ if exist "%F2%" (
 echo.
 
 REM -------------------------------------------------------
-REM  UMT5-XXL text encoder fp8 (4.9 GB)
+REM  Wan2.2 I2V 14B LOW-NOISE expert fp8 (~14 GB)
 REM -------------------------------------------------------
-echo [3/4] UMT5-XXL text encoder fp8 (4.9 GB)
-set "F3=%TEXTENCODERS%\umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+echo [3/5] Wan2.2 I2V 14B low-noise expert fp8 (~14 GB)
+set "F3=%DIFFUSION%\wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors"
 if exist "%F3%" (
     echo       Already exists, skipping.
 ) else (
     echo       Downloading...
     curl -L -C - --progress-bar -o "%F3%.tmp" ^
-        "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+        "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/diffusion_models/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors"
     if !errorlevel! neq 0 (
         echo       [WARN] Download failed or incomplete. Re-run this script to resume.
         set "FAIL=1"
@@ -93,16 +93,16 @@ if exist "%F3%" (
 echo.
 
 REM -------------------------------------------------------
-REM  Wan2.2 VAE (~200 MB)
+REM  UMT5-XXL text encoder fp8 (4.9 GB)
 REM -------------------------------------------------------
-echo [4/4] Wan2.2 VAE (~200 MB)
-set "F4=%VAE%\wan2.2_vae.safetensors"
+echo [4/5] UMT5-XXL text encoder fp8 (4.9 GB)
+set "F4=%TEXTENCODERS%\umt5_xxl_fp8_e4m3fn_scaled.safetensors"
 if exist "%F4%" (
     echo       Already exists, skipping.
 ) else (
     echo       Downloading...
     curl -L -C - --progress-bar -o "%F4%.tmp" ^
-        "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/vae/wan2.2_vae.safetensors"
+        "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors"
     if !errorlevel! neq 0 (
         echo       [WARN] Download failed or incomplete. Re-run this script to resume.
         set "FAIL=1"
@@ -114,6 +114,38 @@ if exist "%F4%" (
 echo.
 
 REM -------------------------------------------------------
+REM  Wan2.2 VAE (~200 MB)
+REM -------------------------------------------------------
+echo [5/5] Wan2.2 VAE (~200 MB)
+set "F5=%VAE%\wan2.2_vae.safetensors"
+if exist "%F5%" (
+    echo       Already exists, skipping.
+) else (
+    echo       Downloading...
+    curl -L -C - --progress-bar -o "%F5%.tmp" ^
+        "https://huggingface.co/Comfy-Org/Wan_2.2_ComfyUI_Repackaged/resolve/main/split_files/vae/wan2.2_vae.safetensors"
+    if !errorlevel! neq 0 (
+        echo       [WARN] Download failed or incomplete. Re-run this script to resume.
+        set "FAIL=1"
+    ) else (
+        move /y "%F5%.tmp" "%F5%" >nul
+        echo       Done.
+    )
+)
+echo.
+
+REM -------------------------------------------------------
+REM  Cleanup: remove obsolete 5B model if present
+REM -------------------------------------------------------
+set "OLD5B=%DIFFUSION%\wan2.2_ti2v_5B_fp16.safetensors"
+if exist "%OLD5B%" (
+    echo Removing obsolete Wan2.2 5B model...
+    del /f /q "%OLD5B%"
+    echo       Removed.
+    echo.
+)
+
+REM -------------------------------------------------------
 REM  Summary
 REM -------------------------------------------------------
 echo ============================================================
@@ -123,12 +155,13 @@ if "%FAIL%"=="1" (
     echo   All models downloaded successfully!
     echo.
     echo   Models installed:
-    echo     - flux1-dev-fp8.safetensors          [checkpoints]
-    echo     - wan2.2_ti2v_5B_fp16.safetensors    [diffusion_models]
-    echo     - umt5_xxl_fp8_e4m3fn_scaled.safetensors [text_encoders]
-    echo     - wan2.2_vae.safetensors             [vae]
+    echo     - flux1-dev-fp8.safetensors                          [checkpoints]
+    echo     - wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors   [diffusion_models]
+    echo     - wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors    [diffusion_models]
+    echo     - umt5_xxl_fp8_e4m3fn_scaled.safetensors             [text_encoders]
+    echo     - wan2.2_vae.safetensors                             [vae]
     echo.
-    echo   Next step: run run_comfyui.bat to launch ComfyUI.
+    echo   Next step: run web_video.bat to launch the web app.
 )
 echo ============================================================
 echo.

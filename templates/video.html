@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wan2.2 14B I2V — Image to Video</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0e0e10;
+    --surface: #1a1a1f;
+    --surface-2: #22222a;
+    --border: #2a2a32;
+    --accent: #6c5ce7;
+    --accent-hover: #7f70f0;
+    --ok: #38d39f;
+    --warn: #f5a524;
+    --err: #ff6b6b;
+    --text: #e8e8ec;
+    --text-dim: #88889a;
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+
+  html { font-size: 15px; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100dvh;
+    overflow-x: hidden;
+  }
+
+  /* ── topbar ── */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(14,14,16,0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .title {
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--text);
+  }
+  .title small { color: var(--text-dim); font-weight: 400; margin-left: 8px; }
+
+  .tabs { display: flex; gap: 4px; margin-left: auto; }
+
+  .tab {
+    padding: 8px 16px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+  }
+  .tab:hover { color: var(--text); border-color: var(--accent); }
+  .tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  .btn-icon {
+    padding: 8px 12px;
+    font-size: 0.85rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .btn-icon:hover { color: var(--text); border-color: var(--accent); }
+
+  /* ── view ── */
+  .view { display: none; padding: 20px; padding-bottom: 240px; }
+  .view.active { display: block; }
+
+  /* ── settings card ── */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+
+  .panel-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .panel-header h3 {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .panel-header .chev {
+    margin-left: auto;
+    color: var(--text-dim);
+    transition: transform 0.2s;
+  }
+  .panel.collapsed .chev { transform: rotate(-90deg); }
+  .panel.collapsed .panel-body { display: none; }
+  .panel-body { padding-top: 14px; }
+
+  .grid-settings {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+  }
+
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .field input, .field select, textarea {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    padding: 9px 10px;
+    font-size: 0.9rem;
+    font-family: inherit;
+    outline: none;
+    transition: border-color 0.15s;
+    width: 100%;
+  }
+  .field input:focus, .field select:focus, textarea:focus { border-color: var(--accent); }
+
+  textarea { resize: vertical; min-height: 80px; line-height: 1.5; }
+
+  .ratio-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .btn-ratio {
+    padding: 8px 14px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+  }
+  .btn-ratio:hover { color: var(--text); border-color: var(--accent); }
+  .btn-ratio.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  /* ── prompt ── */
+  .prompt-block { margin-bottom: 16px; }
+  .prompt-block label {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 6px;
+  }
+
+  /* ── image gallery ── */
+  .folder-group { margin-bottom: 18px; }
+  .folder-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    padding: 6px 4px;
+  }
+  .folder-name {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .folder-count {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    background: var(--surface-2);
+    border-radius: 999px;
+    padding: 2px 8px;
+  }
+  .folder-actions { margin-left: auto; display: flex; gap: 6px; }
+  .btn-mini {
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .btn-mini:hover { color: var(--text); border-color: var(--accent); }
+
+  .gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 8px;
+  }
+
+  .thumb {
+    position: relative;
+    aspect-ratio: 1;
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    cursor: pointer;
+    transition: border-color 0.15s, transform 0.1s;
+  }
+  .thumb:hover { border-color: var(--accent-hover); }
+  .thumb.selected { border-color: var(--accent); }
+  .thumb.selected::after {
+    content: "✓";
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 22px;
+    height: 22px;
+    line-height: 22px;
+    text-align: center;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 50%;
+    font-size: 0.85rem;
+    font-weight: 700;
+  }
+  .thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .thumb .thumb-name {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    background: linear-gradient(transparent, rgba(0,0,0,0.85));
+    color: #fff;
+    font-size: 0.7rem;
+    padding: 14px 6px 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .thumb:hover .thumb-name { opacity: 1; }
+
+  .empty {
+    text-align: center;
+    color: var(--text-dim);
+    padding: 60px 20px;
+    font-size: 0.95rem;
+  }
+
+  /* ── action bar (bottom sticky) ── */
+  .actionbar {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: rgba(14,14,16,0.95);
+    backdrop-filter: blur(12px);
+    border-top: 1px solid var(--border);
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    z-index: 90;
+  }
+
+  .selection-info {
+    font-size: 0.9rem;
+    color: var(--text-dim);
+  }
+  .selection-info b { color: var(--text); font-weight: 600; }
+
+  .btn-generate {
+    margin-left: auto;
+    padding: 12px 24px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.1s;
+  }
+  .btn-generate:hover { background: var(--accent-hover); }
+  .btn-generate:active { transform: scale(0.98); }
+  .btn-generate:disabled {
+    background: var(--surface-2);
+    color: var(--text-dim);
+    cursor: not-allowed;
+  }
+
+  /* ── jobs panel ── */
+  .jobs-panel {
+    position: fixed;
+    bottom: 60px;
+    left: 0; right: 0;
+    background: rgba(20,20,24,0.95);
+    backdrop-filter: blur(12px);
+    border-top: 1px solid var(--border);
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 89;
+    transition: transform 0.2s;
+  }
+  .jobs-panel.collapsed { transform: translateY(calc(100% - 36px)); }
+
+  .jobs-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 20px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    user-select: none;
+  }
+  .jobs-header h4 {
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+  }
+  .jobs-counter {
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    background: var(--surface-2);
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+  .jobs-clear {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 0.78rem;
+    cursor: pointer;
+  }
+  .jobs-clear:hover { color: var(--text); }
+
+  .job-list { padding: 6px 20px 12px; display: flex; flex-direction: column; gap: 6px; }
+  .job-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 0.82rem;
+  }
+  .job-thumb {
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+  .job-name {
+    flex: 1;
+    color: var(--text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .job-status {
+    flex-shrink: 0;
+    font-size: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+  .job-status.queued        { background: var(--surface-2); color: var(--text-dim); }
+  .job-status.loading_models{ background: rgba(245,165,36,0.15); color: var(--warn); }
+  .job-status.running       { background: rgba(108,92,231,0.18); color: var(--accent); }
+  .job-status.done          { background: rgba(56,211,159,0.15); color: var(--ok); }
+  .job-status.failed        { background: rgba(255,107,107,0.15); color: var(--err); }
+
+  /* ── video gallery ── */
+  .video-gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+  }
+  .video-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .video-card:hover { border-color: var(--accent); }
+  .video-card video {
+    width: 100%;
+    aspect-ratio: 16/9;
+    background: #000;
+    display: block;
+    object-fit: cover;
+  }
+  .video-meta {
+    padding: 8px 10px;
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ── modal ── */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(0,0,0,0.85);
+    backdrop-filter: blur(8px);
+    justify-content: center;
+    align-items: center;
+    padding: 30px;
+  }
+  .modal-overlay.visible { display: flex; }
+  .modal-video {
+    max-width: 100%;
+    max-height: calc(100dvh - 80px);
+    border-radius: var(--radius);
+    background: #000;
+  }
+  .modal-close {
+    position: absolute;
+    top: 20px;
+    right: 24px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15);
+    color: #fff;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-close:hover { background: rgba(255,255,255,0.15); }
+
+  .toast {
+    position: fixed;
+    top: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 18px;
+    border-radius: var(--radius-sm);
+    font-size: 0.88rem;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+    z-index: 200;
+    opacity: 0;
+    transition: opacity 0.2s, transform 0.2s;
+    pointer-events: none;
+  }
+  .toast.visible { opacity: 1; }
+  .toast.error { border-color: var(--err); color: var(--err); }
+  .toast.ok { border-color: var(--ok); color: var(--ok); }
+
+  .spinner {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 2px solid var(--text-dim);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    vertical-align: middle;
+    margin-right: 4px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (max-width: 600px) {
+    .topbar { padding: 10px 14px; gap: 10px; }
+    .title small { display: none; }
+    .view { padding: 14px; padding-bottom: 240px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="title">Wan2.2 14B I2V <small>image to video · MoE</small></div>
+  <div class="tabs">
+    <button class="tab active" data-view="generate" onclick="switchView('generate')">Generate</button>
+    <button class="tab" data-view="videos" onclick="switchView('videos')">Videos</button>
+  </div>
+  <button class="btn-icon" onclick="refreshAll()" title="Refresh">↻</button>
+</header>
+
+<!-- ─────── Generate view ─────── -->
+<section class="view active" id="generateView">
+
+  <div class="panel" id="settingsPanel">
+    <div class="panel-header" onclick="togglePanel('settingsPanel')">
+      <h3>Settings</h3>
+      <span class="chev">▼</span>
+    </div>
+    <div class="panel-body">
+      <div class="ratio-row">
+        <button class="btn-ratio" data-w="1280" data-h="720" onclick="pickRatio(this)">16:9 · 1280×720</button>
+        <button class="btn-ratio" data-w="720" data-h="1280" onclick="pickRatio(this)">9:16 · 720×1280</button>
+        <button class="btn-ratio" data-w="1024" data-h="1024" onclick="pickRatio(this)">1:1 · 1024×1024</button>
+      </div>
+      <div class="grid-settings" style="margin-top: 14px;">
+        <div class="field"><label>Width</label><input type="number" id="fWidth" value="1280" step="16"></div>
+        <div class="field"><label>Height</label><input type="number" id="fHeight" value="720" step="16"></div>
+        <div class="field"><label>Frames</label><input type="number" id="fFrames" value="120" step="1"></div>
+        <div class="field"><label>FPS</label><input type="number" id="fFps" value="24" step="1"></div>
+        <div class="field"><label>Steps</label><input type="number" id="fSteps" value="30" step="1"></div>
+        <div class="field"><label>CFG</label><input type="number" id="fCfg" value="3.5" step="0.5"></div>
+        <div class="field"><label>Boundary step</label><input type="text" id="fBoundary" placeholder="auto (= steps/2)" inputmode="numeric"></div>
+        <div class="field"><label>Sampler</label>
+          <select id="fSampler">
+            <option value="euler" selected>euler</option>
+            <option value="uni_pc">uni_pc</option>
+            <option value="euler_ancestral">euler_ancestral</option>
+            <option value="dpmpp_2m">dpmpp_2m</option>
+          </select>
+        </div>
+        <div class="field"><label>Scheduler</label>
+          <select id="fScheduler">
+            <option value="simple" selected>simple</option>
+            <option value="normal">normal</option>
+            <option value="karras">karras</option>
+            <option value="exponential">exponential</option>
+          </select>
+        </div>
+        <div class="field"><label>Seed (blank = random)</label><input type="text" id="fSeed" placeholder="random" inputmode="numeric"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header" style="cursor: default;">
+      <h3>Prompt</h3>
+    </div>
+    <div class="panel-body">
+      <div class="prompt-block">
+        <textarea id="fPrompt" placeholder="Describe the motion you want — e.g. 'slow camera pan, gentle wind blowing the hair, soft cinematic lighting'"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel collapsed" id="negPanel">
+    <div class="panel-header" onclick="togglePanel('negPanel')">
+      <h3>Negative prompt</h3>
+      <span class="chev">▼</span>
+    </div>
+    <div class="panel-body">
+      <textarea id="fNegative" placeholder="Default negative used if blank">static, blurry, low quality, worst quality, JPEG artifacts, ugly, deformed, extra limbs, fused fingers, still frame, cluttered background, overexposed, underexposed</textarea>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header" style="cursor: default;">
+      <h3>Source images</h3>
+      <span class="folder-count" id="imgCount">0</span>
+      <div class="folder-actions">
+        <button class="btn-mini" onclick="selectAll()">Select all</button>
+        <button class="btn-mini" onclick="clearSelection()">Clear</button>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div id="imageList"><div class="empty">Loading…</div></div>
+    </div>
+  </div>
+
+</section>
+
+<!-- ─────── Videos view ─────── -->
+<section class="view" id="videosView">
+  <div class="panel">
+    <div class="panel-header" style="cursor: default;">
+      <h3>Generated videos</h3>
+      <span class="folder-count" id="videoCount">0</span>
+    </div>
+    <div class="panel-body">
+      <div id="videoList"><div class="empty">Loading…</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ─────── Action bar (only on Generate view) ─────── -->
+<div class="actionbar" id="actionBar">
+  <div class="selection-info">
+    <b id="selCount">0</b> selected
+  </div>
+  <button class="btn-generate" id="generateBtn" onclick="doGenerate()" disabled>Generate Video</button>
+</div>
+
+<!-- ─────── Jobs panel ─────── -->
+<div class="jobs-panel collapsed" id="jobsPanel">
+  <div class="jobs-header" onclick="toggleJobs()">
+    <h4>Jobs</h4>
+    <span class="jobs-counter" id="jobCount">0</span>
+    <button class="jobs-clear" onclick="event.stopPropagation(); clearJobs()">Clear finished</button>
+  </div>
+  <div class="job-list" id="jobList"></div>
+</div>
+
+<!-- ─────── Video player modal ─────── -->
+<div class="modal-overlay" id="videoModal" onclick="closeVideoModal(event)">
+  <button class="modal-close" onclick="closeVideoModal()">×</button>
+  <video class="modal-video" id="modalVideo" controls autoplay></video>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+const state = {
+  images: [],            // [{name,path,folder,url,...}]
+  videos: [],
+  selected: new Set(),   // image paths
+  jobs: [],
+  jobsPanelOpen: false,
+};
+
+// ── view switching ──
+function switchView(name) {
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.view === name));
+  document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+  $(name + "View").classList.add("active");
+  $("actionBar").style.display = (name === "generate") ? "flex" : "none";
+  if (name === "videos") loadVideos();
+}
+
+function togglePanel(id) {
+  $(id).classList.toggle("collapsed");
+}
+
+function pickRatio(el) {
+  document.querySelectorAll(".btn-ratio").forEach(b => b.classList.remove("active"));
+  el.classList.add("active");
+  $("fWidth").value = el.dataset.w;
+  $("fHeight").value = el.dataset.h;
+}
+
+// ── toast ──
+let _toastTimer;
+function toast(msg, kind) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.className = "toast visible " + (kind || "");
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => t.classList.remove("visible"), 3000);
+}
+
+// ── images ──
+async function loadImages() {
+  $("imageList").innerHTML = '<div class="empty">Loading…</div>';
+  try {
+    const res = await fetch("/api/images");
+    state.images = await res.json();
+  } catch (e) {
+    $("imageList").innerHTML = '<div class="empty">Failed to load images.</div>';
+    return;
+  }
+  renderImages();
+}
+
+function renderImages() {
+  const root = $("imageList");
+  $("imgCount").textContent = state.images.length;
+
+  if (state.images.length === 0) {
+    root.innerHTML = '<div class="empty">No images found in output/images.</div>';
+    updateSelCount();
+    return;
+  }
+
+  // group by folder
+  const groups = new Map();
+  for (const img of state.images) {
+    const k = img.folder;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(img);
+  }
+  // sort folders: '.' first, then alpha
+  const folderKeys = [...groups.keys()].sort((a, b) => {
+    if (a === ".") return -1;
+    if (b === ".") return 1;
+    return a.localeCompare(b, undefined, { numeric: true });
+  });
+
+  let html = "";
+  for (const folder of folderKeys) {
+    const items = groups.get(folder);
+    const label = folder === "." ? "(root)" : folder;
+    html += `
+      <div class="folder-group">
+        <div class="folder-header">
+          <span class="folder-name">${escapeHtml(label)}</span>
+          <span class="folder-count">${items.length}</span>
+          <div class="folder-actions">
+            <button class="btn-mini" onclick="selectFolder('${escapeAttr(folder)}', true)">Select</button>
+            <button class="btn-mini" onclick="selectFolder('${escapeAttr(folder)}', false)">Deselect</button>
+          </div>
+        </div>
+        <div class="gallery">
+          ${items.map(img => `
+            <div class="thumb${state.selected.has(img.path) ? ' selected' : ''}"
+                 data-path="${escapeAttr(img.path)}"
+                 onclick="toggleSelect('${escapeAttr(img.path)}', event)">
+              <img src="${escapeAttr(img.url)}" alt="" loading="lazy">
+              <div class="thumb-name">${escapeHtml(img.name)}</div>
+            </div>`).join("")}
+        </div>
+      </div>`;
+  }
+  root.innerHTML = html;
+  updateSelCount();
+}
+
+function escapeHtml(s) { return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function escapeAttr(s) { return String(s).replace(/['"\\]/g, "\\$&"); }
+
+let _lastClickedPath = null;
+function toggleSelect(path, ev) {
+  if (ev && ev.shiftKey && _lastClickedPath) {
+    const order = state.images.map(i => i.path);
+    const a = order.indexOf(_lastClickedPath);
+    const b = order.indexOf(path);
+    if (a >= 0 && b >= 0) {
+      const [lo, hi] = a < b ? [a, b] : [b, a];
+      const want = !state.selected.has(path);
+      for (let i = lo; i <= hi; i++) {
+        if (want) state.selected.add(order[i]);
+        else state.selected.delete(order[i]);
+      }
+      _lastClickedPath = path;
+      updateThumbStates();
+      updateSelCount();
+      return;
+    }
+  }
+  if (state.selected.has(path)) state.selected.delete(path);
+  else state.selected.add(path);
+  _lastClickedPath = path;
+  updateThumbStates();
+  updateSelCount();
+}
+
+function updateThumbStates() {
+  document.querySelectorAll(".thumb").forEach(el => {
+    const p = el.dataset.path;
+    el.classList.toggle("selected", state.selected.has(p));
+  });
+}
+
+function selectFolder(folder, select) {
+  for (const img of state.images) {
+    if (img.folder === folder) {
+      if (select) state.selected.add(img.path);
+      else state.selected.delete(img.path);
+    }
+  }
+  updateThumbStates();
+  updateSelCount();
+}
+
+function selectAll() {
+  state.images.forEach(i => state.selected.add(i.path));
+  updateThumbStates();
+  updateSelCount();
+}
+
+function clearSelection() {
+  state.selected.clear();
+  updateThumbStates();
+  updateSelCount();
+}
+
+function updateSelCount() {
+  const n = state.selected.size;
+  $("selCount").textContent = n;
+  $("generateBtn").disabled = (n === 0);
+}
+
+// ── videos ──
+async function loadVideos() {
+  $("videoList").innerHTML = '<div class="empty">Loading…</div>';
+  try {
+    const res = await fetch("/api/videos");
+    state.videos = await res.json();
+  } catch (e) {
+    $("videoList").innerHTML = '<div class="empty">Failed to load videos.</div>';
+    return;
+  }
+  renderVideos();
+}
+
+function renderVideos() {
+  const root = $("videoList");
+  $("videoCount").textContent = state.videos.length;
+  if (state.videos.length === 0) {
+    root.innerHTML = '<div class="empty">No videos yet. Generate some!</div>';
+    return;
+  }
+
+  const groups = new Map();
+  for (const v of state.videos) {
+    const k = v.folder;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(v);
+  }
+  const folderKeys = [...groups.keys()].sort((a, b) => {
+    if (a === ".") return 1;
+    if (b === ".") return -1;
+    return b.localeCompare(a, undefined, { numeric: true });
+  });
+
+  let html = "";
+  for (const folder of folderKeys) {
+    const items = groups.get(folder);
+    const label = folder === "." ? "(root)" : folder;
+    html += `
+      <div class="folder-group">
+        <div class="folder-header">
+          <span class="folder-name">${escapeHtml(label)}</span>
+          <span class="folder-count">${items.length}</span>
+        </div>
+        <div class="video-gallery">
+          ${items.map(v => `
+            <div class="video-card" onclick="openVideo('${escapeAttr(v.url)}', '${escapeAttr(v.name)}')">
+              <video src="${escapeAttr(v.url)}" preload="metadata" muted></video>
+              <div class="video-meta" title="${escapeHtml(v.name)}">${escapeHtml(v.name)}</div>
+            </div>`).join("")}
+        </div>
+      </div>`;
+  }
+  root.innerHTML = html;
+}
+
+function openVideo(url, name) {
+  const v = $("modalVideo");
+  v.src = url;
+  v.currentTime = 0;
+  $("videoModal").classList.add("visible");
+}
+function closeVideoModal(ev) {
+  if (ev && ev.target.id !== "videoModal" && ev.target.className !== "modal-close") return;
+  $("videoModal").classList.remove("visible");
+  const v = $("modalVideo");
+  v.pause();
+  v.removeAttribute("src");
+  v.load();
+}
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && $("videoModal").classList.contains("visible")) closeVideoModal({target: {id: "videoModal"}});
+});
+
+// ── generate ──
+async function doGenerate() {
+  if (state.selected.size === 0) return;
+  const prompt = $("fPrompt").value.trim();
+  if (!prompt) { toast("Prompt is empty", "error"); return; }
+
+  const payload = {
+    prompt,
+    negative: $("fNegative").value.trim(),
+    images: [...state.selected],
+    width: parseInt($("fWidth").value) || 1280,
+    height: parseInt($("fHeight").value) || 720,
+    frames: parseInt($("fFrames").value) || 120,
+    fps: parseFloat($("fFps").value) || 24,
+    steps: parseInt($("fSteps").value) || 30,
+    cfg: parseFloat($("fCfg").value) || 3.5,
+    sampler: $("fSampler").value,
+    scheduler: $("fScheduler").value,
+    seed: $("fSeed").value.trim() || null,
+    boundary_step: $("fBoundary").value.trim() || null,
+  };
+
+  $("generateBtn").disabled = true;
+  $("generateBtn").innerHTML = '<span class="spinner"></span>Queueing…';
+
+  try {
+    const res = await fetch("/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) { toast(data.error || "Failed to queue", "error"); return; }
+    toast(`Queued ${data.jobs.length} job${data.jobs.length === 1 ? '' : 's'} → batch_${data.batch}`, "ok");
+    openJobsPanel();
+    refreshJobs();
+  } catch (e) {
+    toast("Network error: " + e.message, "error");
+  } finally {
+    $("generateBtn").disabled = (state.selected.size === 0);
+    $("generateBtn").textContent = "Generate Video";
+  }
+}
+
+// ── jobs ──
+async function refreshJobs() {
+  try {
+    const res = await fetch("/api/jobs");
+    state.jobs = await res.json();
+  } catch (e) { return; }
+  renderJobs();
+}
+
+function renderJobs() {
+  const root = $("jobList");
+  $("jobCount").textContent = state.jobs.length;
+  if (state.jobs.length === 0) {
+    root.innerHTML = '<div class="empty" style="padding: 14px;">No jobs yet.</div>';
+    return;
+  }
+  const stamp = (s) => {
+    if (s === "queued") return "queued";
+    if (s === "loading_models") return "loading model";
+    if (s === "running") return "running";
+    if (s === "done") return "done";
+    if (s === "failed") return "failed";
+    return s;
+  };
+  root.innerHTML = state.jobs.map(j => `
+    <div class="job-item" ${j.video_url ? `style="cursor: pointer;" onclick="openVideo('${escapeAttr(j.video_url)}', '${escapeAttr(j.output)}')"` : ''}>
+      <img class="job-thumb" src="${escapeAttr(j.image_url)}" alt="">
+      <div class="job-name" title="${escapeHtml(j.output)}">${escapeHtml(j.output)}</div>
+      ${j.error ? `<div class="job-status failed" title="${escapeHtml(j.error)}">${escapeHtml(stamp(j.status))}</div>` :
+        `<div class="job-status ${j.status}">${j.status === 'running' || j.status === 'loading_models' ? '<span class="spinner"></span>' : ''}${escapeHtml(stamp(j.status))}</div>`}
+    </div>`).join("");
+}
+
+function openJobsPanel() {
+  $("jobsPanel").classList.remove("collapsed");
+  state.jobsPanelOpen = true;
+}
+
+function toggleJobs() {
+  $("jobsPanel").classList.toggle("collapsed");
+  state.jobsPanelOpen = !$("jobsPanel").classList.contains("collapsed");
+}
+
+async function clearJobs() {
+  await fetch("/api/jobs/clear", { method: "POST" });
+  refreshJobs();
+}
+
+// ── refresh ──
+function refreshAll() {
+  loadImages();
+  if ($("videosView").classList.contains("active")) loadVideos();
+  refreshJobs();
+}
+
+// ── poll ──
+setInterval(() => {
+  refreshJobs();
+  // refresh videos if any job just finished and videos tab is active
+  if ($("videosView").classList.contains("active")) {
+    const anyRecentlyDone = state.jobs.some(j => j.status === "done" && j.finished_at && (Date.now()/1000 - j.finished_at) < 8);
+    if (anyRecentlyDone) loadVideos();
+  }
+}, 2500);
+
+// ── init ──
+loadImages();
+refreshJobs();
+
+// keyboard: Ctrl+A to select all
+document.addEventListener("keydown", e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === "a" && $("generateView").classList.contains("active")) {
+    if (document.activeElement && (document.activeElement.tagName === "INPUT" || document.activeElement.tagName === "TEXTAREA")) return;
+    e.preventDefault();
+    selectAll();
+  }
+});
+</script>
+</body>
+</html>
