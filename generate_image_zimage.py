@@ -4,6 +4,15 @@ import argparse
 import time
 import random
 import ctypes
+import traceback
+
+# Force UTF-8 on stdout/stderr so tqdm progress bars (█ glyphs etc.) don't
+# crash with [Errno 22] Invalid argument on a non-UTF-8 Windows console.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, OSError):
+        pass
 
 _LOW_PRIORITY = "--low-priority" in sys.argv
 
@@ -13,16 +22,12 @@ if _LOW_PRIORITY:
             ctypes.windll.kernel32.GetCurrentProcess(), 0x00004000)
     except Exception:
         pass
-
-COMFY_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ComfyUI_windows_portable", "ComfyUI")
-sys.path.insert(0, COMFY_DIR)
+    os.environ["CUDA_DEVICE_SCHEDULE"] = "YIELD"
 
 import torch
-import numpy as np
-from PIL import Image
 
 if _LOW_PRIORITY:
-    for _dll in ("cudart64_12.dll", "cudart64_110.dll"):
+    for _dll in ("cudart64_13.dll", "cudart64_12.dll", "cudart64_110.dll"):
         try:
             _cudart = ctypes.WinDLL(_dll)
             _cudart.cudaSetDeviceFlags(ctypes.c_uint(0x04))
@@ -30,57 +35,70 @@ if _LOW_PRIORITY:
         except (OSError, Exception):
             continue
 
-import comfy.sd
-import comfy.sample
-import comfy.utils
-import comfy.model_management
-import folder_paths
+from diffusers import ZImagePipeline
 
-MODELS_DIR = os.path.join(COMFY_DIR, "models")
-CHECKPOINT = os.path.join(MODELS_DIR, "checkpoints", "flux1-dev-fp8.safetensors")
+MODEL_ID = "Tongyi-MAI/Z-Image-Turbo"
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output", "images")
 
+_pipe = None
 
-def load_models():
-    print("Loading FLUX.1 Dev FP8 checkpoint...")
-    model, clip, vae = comfy.sd.load_checkpoint_guess_config(
-        CHECKPOINT, output_vae=True, output_clip=True,
-        embedding_directory=folder_paths.get_folder_paths("embeddings"),
-    )[:3]
-    print("Models loaded. Ready.\n")
-    return model, clip, vae
+
+def load_pipeline():
+    global _pipe
+    if _pipe is not None:
+        return _pipe
+    print(f"Loading Z-Image-Turbo from {MODEL_ID}...")
+    print("(first run will download ~12 GB from HuggingFace)\n")
+    _pipe = ZImagePipeline.from_pretrained(
+        MODEL_ID,
+        torch_dtype=torch.bfloat16,
+        low_cpu_mem_usage=False,
+    )
+    if _LOW_PRIORITY:
+        _pipe.enable_model_cpu_offload()
+        try:
+            _pipe.enable_attention_slicing(slice_size=1)
+        except (AttributeError, NotImplementedError):
+            pass
+    else:
+        _pipe.to("cuda")
+    print("Pipeline loaded. Ready.\n")
+    return _pipe
+
+
+def _yield_callback(pipe, step_index, timestep, callback_kwargs):
+    """Flush GPU work and pause so DWM / other GUI apps get GPU time."""
+    torch.cuda.synchronize()
+    time.sleep(0.1)
+    return callback_kwargs
 
 
 @torch.inference_mode()
-def generate(model, clip, vae, prompt, width, height, steps, sampler_name, scheduler, seed, output_path):
+def generate(pipe, prompt, width, height, steps, seed, output_path):
     print(f"Prompt: {prompt[:80]}{'...' if len(prompt) > 80 else ''}")
+    print(f"Sampling ({steps - 1} NFEs, seed {seed})...")
 
-    positive = clip.encode_from_tokens_scheduled(clip.tokenize(prompt))
-    negative = clip.encode_from_tokens_scheduled(clip.tokenize(""))
-
-    latent_image = torch.zeros([1, 4, height // 8, width // 8],
-                               device=comfy.model_management.intermediate_device())
-    latent_image = comfy.sample.fix_empty_latent_channels(model, latent_image)
-    noise = comfy.sample.prepare_noise(latent_image, seed)
-
-    print(f"Sampling ({steps} steps, {sampler_name}/{scheduler}, seed {seed})...")
-    samples = comfy.sample.sample(
-        model, noise, steps, cfg=1.0,
-        sampler_name=sampler_name, scheduler=scheduler,
-        positive=positive, negative=negative,
-        latent_image=latent_image, denoise=1.0, seed=seed,
+    kwargs = dict(
+        prompt=prompt,
+        height=height,
+        width=width,
+        num_inference_steps=steps,
+        guidance_scale=0.0,
+        generator=torch.Generator("cuda").manual_seed(seed),
     )
+    if _LOW_PRIORITY:
+        kwargs["callback_on_step_end"] = _yield_callback
 
-    images = vae.decode(samples)
-    img_np = np.clip(255.0 * images[0].detach().cpu().float().numpy(), 0, 255).astype(np.uint8)
-    Image.fromarray(img_np).save(output_path)
+    image = pipe(**kwargs).images[0]
+
+    image.save(output_path)
     print(f"Saved: {output_path}\n")
 
 
 def make_output_path(suffix=""):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     ts = time.strftime("%Y%m%d_%H%M%S")
-    return os.path.join(OUTPUT_DIR, f"flux_{ts}{suffix}.png")
+    return os.path.join(OUTPUT_DIR, f"zimage_{ts}{suffix}.png")
 
 
 def parse_input(user_input):
@@ -100,11 +118,10 @@ def parse_input(user_input):
     return prompt, count
 
 
-def run_interactive(model, clip, vae, args):
+def run_interactive(pipe, args):
     print("=" * 60)
-    print("  FLUX.1 Dev FP8 — Interactive Mode")
-    print(f"  Resolution: {args.width}x{args.height}  Steps: {args.steps}")
-    print(f"  Sampler: {args.sampler}/{args.scheduler}")
+    print("  Z-Image-Turbo — Interactive Mode")
+    print(f"  Resolution: {args.width}x{args.height}  Steps: {args.steps} ({args.steps - 1} NFEs)")
     print("=" * 60)
     print("Enter a prompt or file path. Append xN to queue N runs.")
     print("  Examples:")
@@ -141,29 +158,30 @@ def run_interactive(model, clip, vae, args):
             tag = f"[{i+1}/{count}] " if count > 1 else ""
             print(f"{tag}", end="")
             try:
-                generate(model, clip, vae, prompt, args.width, args.height,
-                         args.steps, args.sampler, args.scheduler, seed, output_path)
+                generate(pipe, prompt, args.width, args.height,
+                         args.steps, seed, output_path)
             except Exception as e:
-                print(f"Error: {e}\n")
+                print(f"Error: {e}")
+                traceback.print_exc()
+                print()
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="FLUX.1 Dev FP8 — Text to Image (interactive or single-shot)")
+        description="Z-Image-Turbo — Text to Image (interactive or single-shot)")
     parser.add_argument("prompt", type=str, nargs="?", default=None,
                         help="Text prompt for single-shot mode (or use --prompt-file)")
     parser.add_argument("--prompt-file", type=str, default=None,
                         help="Read prompt from a text file (single-shot mode)")
     parser.add_argument("--interactive", "-i", action="store_true",
-                        help="Interactive mode: load models once, then accept prompts in a loop")
+                        help="Interactive mode: load pipeline once, then accept prompts in a loop")
     parser.add_argument("--width", type=int, default=704, help="Image width (default: 704)")
     parser.add_argument("--height", type=int, default=1280, help="Image height (default: 1280)")
-    parser.add_argument("--steps", type=int, default=20, help="Sampling steps (default: 20)")
-    parser.add_argument("--sampler", type=str, default="euler", help="Sampler (default: euler)")
-    parser.add_argument("--scheduler", type=str, default="simple", help="Scheduler (default: simple)")
+    parser.add_argument("--steps", type=int, default=9,
+                        help="Inference steps (default: 9, results in 8 DiT forwards)")
     parser.add_argument("--seed", type=int, default=None, help="Seed (default: random)")
     parser.add_argument("--output", type=str, default=None,
-                        help="Output path (default: output/images/flux_TIMESTAMP.png)")
+                        help="Output path (default: output/images/zimage_TIMESTAMP.png)")
     parser.add_argument("--low-priority", action="store_true",
                         help="Reduce CPU/GPU priority so other applications stay responsive")
     args = parser.parse_args()
@@ -171,9 +189,10 @@ def main():
     if _LOW_PRIORITY:
         print("[Low priority] CPU/GPU scheduling priority reduced.\n")
 
+    pipe = load_pipeline()
+
     if args.interactive:
-        model, clip, vae = load_models()
-        run_interactive(model, clip, vae, args)
+        run_interactive(pipe, args)
         return
 
     if args.prompt_file:
@@ -182,15 +201,13 @@ def main():
     if not args.prompt:
         parser.error("provide a prompt, --prompt-file, or use --interactive / -i")
 
-    model, clip, vae = load_models()
-
     if args.seed is None:
         args.seed = random.randint(0, 2**32 - 1)
     if args.output is None:
         args.output = make_output_path()
 
-    generate(model, clip, vae, args.prompt, args.width, args.height,
-             args.steps, args.sampler, args.scheduler, args.seed, args.output)
+    generate(pipe, args.prompt, args.width, args.height,
+             args.steps, args.seed, args.output)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Wan2.2 14B I2V — Image to Video</title>
+<title>Image to Video</title>
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -54,6 +54,56 @@
     color: var(--text);
   }
   .title small { color: var(--text-dim); font-weight: 400; margin-left: 8px; }
+
+  .backend-picker {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    padding: 7px 28px 7px 10px;
+    font-size: 0.85rem;
+    font-family: inherit;
+    outline: none;
+    cursor: pointer;
+    transition: border-color 0.15s;
+    max-width: 240px;
+  }
+  .backend-picker:hover { border-color: var(--accent); }
+  .backend-picker:focus { border-color: var(--accent); }
+
+  .missing-banner {
+    background: rgba(245,165,36,0.12);
+    border: 1px solid var(--warn);
+    color: var(--warn);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    margin-bottom: 12px;
+    font-size: 0.85rem;
+    line-height: 1.5;
+  }
+  .missing-banner b { color: var(--text); }
+
+  .advanced-toggle {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-top: 12px;
+    padding: 4px 0;
+  }
+  .advanced-toggle:hover { color: var(--text); }
+  .advanced-fields { display: none; margin-top: 10px; }
+  .advanced-fields.visible { display: grid; }
+
+  .field-help {
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    margin-top: 4px;
+    line-height: 1.35;
+  }
 
   .tabs { display: flex; gap: 4px; margin-left: auto; }
 
@@ -182,7 +232,23 @@
     gap: 10px;
     margin-bottom: 8px;
     padding: 6px 4px;
+    cursor: pointer;
+    user-select: none;
+    border-radius: var(--radius-sm);
+    transition: background 0.12s;
   }
+  .folder-header:hover { background: var(--surface-2); }
+  .folder-chev {
+    display: inline-block;
+    width: 14px;
+    text-align: center;
+    color: var(--text-dim);
+    transition: transform 0.18s;
+    font-size: 0.8rem;
+  }
+  .folder-group.collapsed .folder-chev { transform: rotate(-90deg); }
+  .folder-group.collapsed .gallery,
+  .folder-group.collapsed .video-gallery { display: none; }
   .folder-name {
     font-size: 0.85rem;
     color: var(--text-dim);
@@ -241,6 +307,7 @@
     border-radius: 50%;
     font-size: 0.85rem;
     font-weight: 700;
+    pointer-events: none;
   }
   .thumb img {
     width: 100%;
@@ -248,6 +315,29 @@
     object-fit: cover;
     display: block;
   }
+  .thumb-preview-btn {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    width: 24px;
+    height: 24px;
+    border: 1px solid rgba(255,255,255,0.2);
+    background: rgba(0,0,0,0.6);
+    color: #fff;
+    border-radius: 50%;
+    font-size: 0.85rem;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.15s, background 0.15s, border-color 0.15s;
+    z-index: 2;
+    padding: 0;
+  }
+  .thumb:hover .thumb-preview-btn { opacity: 1; }
+  .thumb-preview-btn:hover { background: rgba(0,0,0,0.9); border-color: var(--accent); }
   .thumb .thumb-name {
     position: absolute;
     bottom: 0; left: 0; right: 0;
@@ -445,6 +535,29 @@
     border-radius: var(--radius);
     background: #000;
   }
+  .modal-image {
+    max-width: 100%;
+    max-height: calc(100dvh - 80px);
+    border-radius: var(--radius);
+    background: #000;
+    object-fit: contain;
+    display: block;
+  }
+  .modal-caption {
+    position: absolute;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.6);
+    color: var(--text);
+    padding: 6px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 0.85rem;
+    max-width: calc(100vw - 80px);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   .modal-close {
     position: absolute;
     top: 20px;
@@ -507,7 +620,8 @@
 <body>
 
 <header class="topbar">
-  <div class="title">Wan2.2 14B I2V <small>image to video · MoE</small></div>
+  <div class="title">I2V <small id="backendTagline">image to video</small></div>
+  <select id="backendPicker" class="backend-picker" onchange="onBackendChange(this.value)" title="Model"></select>
   <div class="tabs">
     <button class="tab active" data-view="generate" onclick="switchView('generate')">Generate</button>
     <button class="tab" data-view="videos" onclick="switchView('videos')">Videos</button>
@@ -518,43 +632,18 @@
 <!-- ─────── Generate view ─────── -->
 <section class="view active" id="generateView">
 
+  <div id="missingBanner" class="missing-banner" style="display: none;"></div>
+
   <div class="panel" id="settingsPanel">
     <div class="panel-header" onclick="togglePanel('settingsPanel')">
       <h3>Settings</h3>
       <span class="chev">▼</span>
     </div>
     <div class="panel-body">
-      <div class="ratio-row">
-        <button class="btn-ratio" data-w="1280" data-h="720" onclick="pickRatio(this)">16:9 · 1280×720</button>
-        <button class="btn-ratio" data-w="720" data-h="1280" onclick="pickRatio(this)">9:16 · 720×1280</button>
-        <button class="btn-ratio" data-w="1024" data-h="1024" onclick="pickRatio(this)">1:1 · 1024×1024</button>
-      </div>
-      <div class="grid-settings" style="margin-top: 14px;">
-        <div class="field"><label>Width</label><input type="number" id="fWidth" value="1280" step="16"></div>
-        <div class="field"><label>Height</label><input type="number" id="fHeight" value="720" step="16"></div>
-        <div class="field"><label>Frames</label><input type="number" id="fFrames" value="120" step="1"></div>
-        <div class="field"><label>FPS</label><input type="number" id="fFps" value="24" step="1"></div>
-        <div class="field"><label>Steps</label><input type="number" id="fSteps" value="30" step="1"></div>
-        <div class="field"><label>CFG</label><input type="number" id="fCfg" value="3.5" step="0.5"></div>
-        <div class="field"><label>Boundary step</label><input type="text" id="fBoundary" placeholder="auto (= steps/2)" inputmode="numeric"></div>
-        <div class="field"><label>Sampler</label>
-          <select id="fSampler">
-            <option value="euler" selected>euler</option>
-            <option value="uni_pc">uni_pc</option>
-            <option value="euler_ancestral">euler_ancestral</option>
-            <option value="dpmpp_2m">dpmpp_2m</option>
-          </select>
-        </div>
-        <div class="field"><label>Scheduler</label>
-          <select id="fScheduler">
-            <option value="simple" selected>simple</option>
-            <option value="normal">normal</option>
-            <option value="karras">karras</option>
-            <option value="exponential">exponential</option>
-          </select>
-        </div>
-        <div class="field"><label>Seed (blank = random)</label><input type="text" id="fSeed" placeholder="random" inputmode="numeric"></div>
-      </div>
+      <div id="ratioRow" class="ratio-row"></div>
+      <div id="settingsFields" class="grid-settings" style="margin-top: 14px;"></div>
+      <button type="button" class="advanced-toggle" id="advToggle" onclick="toggleAdvanced()" style="display: none;">▸ Advanced</button>
+      <div id="advancedFields" class="grid-settings advanced-fields"></div>
     </div>
   </div>
 
@@ -564,7 +653,7 @@
     </div>
     <div class="panel-body">
       <div class="prompt-block">
-        <textarea id="fPrompt" placeholder="Describe the motion you want — e.g. 'slow camera pan, gentle wind blowing the hair, soft cinematic lighting'"></textarea>
+        <textarea id="fPrompt" placeholder="Describe the motion you want — e.g. 'slow camera pan, gentle wind blowing the hair, soft cinematic lighting'">slow camera pan, she is moving her body slightly</textarea>
       </div>
     </div>
   </div>
@@ -575,7 +664,7 @@
       <span class="chev">▼</span>
     </div>
     <div class="panel-body">
-      <textarea id="fNegative" placeholder="Default negative used if blank">static, blurry, low quality, worst quality, JPEG artifacts, ugly, deformed, extra limbs, fused fingers, still frame, cluttered background, overexposed, underexposed</textarea>
+      <textarea id="fNegative" placeholder="Default negative used if blank"></textarea>
     </div>
   </div>
 
@@ -632,6 +721,13 @@
   <video class="modal-video" id="modalVideo" controls autoplay></video>
 </div>
 
+<!-- ─────── Image preview modal ─────── -->
+<div class="modal-overlay" id="imageModal" onclick="closeImagePreview(event)">
+  <button class="modal-close" onclick="closeImagePreview()">×</button>
+  <img class="modal-image" id="modalImage" alt="">
+  <div class="modal-caption" id="modalImageCaption"></div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -643,7 +739,49 @@ const state = {
   selected: new Set(),   // image paths
   jobs: [],
   jobsPanelOpen: false,
+  collapsedImgFolders: null, // Set<string> | null (null = not yet initialised)
+  collapsedVidFolders: null,
+  // Backend state
+  backends: {},          // {name: backendSpec}
+  defaultBackend: null,
+  activeBackend: null,
+  // Track whether the user has manually edited the negative prompt; if so, we
+  // don't clobber it when they switch backends.
+  negativeUserEdited: false,
 };
+
+// Default: every subfolder collapsed; root "." expanded. We seed lazily so a
+// user's manual expand/collapse choices survive refreshes of the list.
+function ensureFolderCollapseState(folders, setName) {
+  if (state[setName] === null) {
+    state[setName] = new Set(folders.filter(f => f !== "."));
+    return;
+  }
+  for (const f of folders) {
+    if (f !== "." && !state[setName].has(f) && !state[setName]._touched?.has?.(f)) {
+      // new folder discovered after first render -> start collapsed
+      state[setName].add(f);
+    }
+  }
+}
+
+function toggleFolder(setName, folder) {
+  const s = state[setName];
+  if (!s) return;
+  if (s.has(folder)) s.delete(folder);
+  else s.add(folder);
+  // mark this folder as user-touched so reload doesn't re-collapse it
+  s._touched = s._touched || new Set();
+  s._touched.add(folder);
+  const root = setName === "collapsedImgFolders" ? $("imageList") : $("videoList");
+  const el = root.querySelector(`.folder-group[data-folder="${cssEscape(folder)}"]`);
+  if (el) el.classList.toggle("collapsed", s.has(folder));
+}
+
+function cssEscape(s) {
+  if (window.CSS && CSS.escape) return CSS.escape(s);
+  return String(s).replace(/[^a-zA-Z0-9_-]/g, c => "\\" + c);
+}
 
 // ── view switching ──
 function switchView(name) {
@@ -658,11 +796,125 @@ function togglePanel(id) {
   $(id).classList.toggle("collapsed");
 }
 
+function toggleAdvanced() {
+  const adv = $("advancedFields");
+  const btn = $("advToggle");
+  const open = adv.classList.toggle("visible");
+  btn.textContent = (open ? "▾" : "▸") + " Advanced";
+}
+
 function pickRatio(el) {
   document.querySelectorAll(".btn-ratio").forEach(b => b.classList.remove("active"));
   el.classList.add("active");
-  $("fWidth").value = el.dataset.w;
-  $("fHeight").value = el.dataset.h;
+  const wInput = document.querySelector('[data-field-id="width"]');
+  const hInput = document.querySelector('[data-field-id="height"]');
+  if (wInput) wInput.value = el.dataset.w;
+  if (hInput) hInput.value = el.dataset.h;
+}
+
+// ── backends ──
+async function loadBackends() {
+  let data;
+  try {
+    const res = await fetch("/api/backends");
+    data = await res.json();
+  } catch (e) {
+    toast("Failed to load model list", "error");
+    return;
+  }
+  state.defaultBackend = data.default;
+  state.backends = {};
+  for (const b of data.backends) state.backends[b.name] = b;
+
+  // Populate picker
+  const picker = $("backendPicker");
+  picker.innerHTML = data.backends.map(b =>
+    `<option value="${escapeAttr(b.name)}">${escapeHtml(b.display_name)}${b.required_files_present ? '' : ' (files missing)'}</option>`
+  ).join("");
+  picker.value = state.defaultBackend;
+  onBackendChange(state.defaultBackend);
+}
+
+function onBackendChange(name) {
+  const b = state.backends[name];
+  if (!b) return;
+  state.activeBackend = name;
+  $("backendTagline").textContent = b.description || b.display_name;
+
+  // Negative-prompt default (only update if user hasn't customised it)
+  const negEl = $("fNegative");
+  if (!state.negativeUserEdited) negEl.value = b.default_negative || "";
+  negEl.placeholder = "Default used if blank: " + (b.default_negative || "");
+
+  // Missing files banner
+  if (!b.required_files_present) {
+    $("missingBanner").style.display = "block";
+    $("missingBanner").innerHTML =
+      `<b>${escapeHtml(b.display_name)}</b> is missing model files. ` +
+      `Run <code>download_models.bat</code> to fetch them, then refresh.`;
+  } else {
+    $("missingBanner").style.display = "none";
+  }
+
+  // Rebuild settings UI from the field schema
+  renderFields(b.fields);
+}
+
+function renderFields(fields) {
+  // Split into ratio buttons, normal fields, advanced fields.
+  const ratioField = fields.find(f => f.type === "ratio_buttons");
+  const normal = fields.filter(f => f.type !== "ratio_buttons" && !f.advanced);
+  const advanced = fields.filter(f => f.type !== "ratio_buttons" && f.advanced);
+
+  // Ratio presets
+  const ratioRow = $("ratioRow");
+  if (ratioField && ratioField.presets && ratioField.presets.length) {
+    ratioRow.style.display = "flex";
+    ratioRow.innerHTML = ratioField.presets.map(p =>
+      `<button type="button" class="btn-ratio" data-w="${p.w}" data-h="${p.h}" onclick="pickRatio(this)">${escapeHtml(p.label)}</button>`
+    ).join("");
+  } else {
+    ratioRow.style.display = "none";
+    ratioRow.innerHTML = "";
+  }
+
+  $("settingsFields").innerHTML = normal.map(fieldHtml).join("");
+  $("advancedFields").innerHTML = advanced.map(fieldHtml).join("");
+  $("advancedFields").classList.remove("visible");
+  $("advToggle").style.display = advanced.length ? "inline-block" : "none";
+  $("advToggle").textContent = "▸ Advanced";
+}
+
+function fieldHtml(f) {
+  const id = "fld_" + f.id;
+  let control;
+  if (f.type === "select") {
+    const opts = (f.options || []).map(o =>
+      `<option value="${escapeAttr(o)}"${o === f.default ? ' selected' : ''}>${escapeHtml(o)}</option>`
+    ).join("");
+    control = `<select id="${id}" data-field-id="${escapeAttr(f.id)}" data-field-type="${escapeAttr(f.type)}">${opts}</select>`;
+  } else if (f.type === "int" || f.type === "float") {
+    const step = f.step != null ? ` step="${f.step}"` : "";
+    const min  = f.min  != null ? ` min="${f.min}"`   : "";
+    const max  = f.max  != null ? ` max="${f.max}"`   : "";
+    const val  = f.default != null ? ` value="${escapeAttr(f.default)}"` : "";
+    control = `<input type="number" id="${id}" data-field-id="${escapeAttr(f.id)}" data-field-type="${escapeAttr(f.type)}"${step}${min}${max}${val}>`;
+  } else {
+    // text
+    const ph  = f.placeholder ? ` placeholder="${escapeAttr(f.placeholder)}"` : "";
+    const val = f.default ? ` value="${escapeAttr(f.default)}"` : "";
+    control = `<input type="text" id="${id}" data-field-id="${escapeAttr(f.id)}" data-field-type="${escapeAttr(f.type)}" inputmode="numeric"${ph}${val}>`;
+  }
+  const help = f.help ? `<div class="field-help">${escapeHtml(f.help)}</div>` : "";
+  return `<div class="field"><label for="${id}">${escapeHtml(f.label)}</label>${control}${help}</div>`;
+}
+
+function collectFieldValues() {
+  const out = {};
+  document.querySelectorAll('[data-field-id]').forEach(el => {
+    out[el.dataset.fieldId] = el.value;
+  });
+  return out;
 }
 
 // ── toast ──
@@ -712,16 +964,20 @@ function renderImages() {
     return a.localeCompare(b, undefined, { numeric: true });
   });
 
+  ensureFolderCollapseState(folderKeys, "collapsedImgFolders");
+
   let html = "";
   for (const folder of folderKeys) {
     const items = groups.get(folder);
     const label = folder === "." ? "(root)" : folder;
+    const isCollapsed = state.collapsedImgFolders.has(folder);
     html += `
-      <div class="folder-group">
-        <div class="folder-header">
+      <div class="folder-group${isCollapsed ? ' collapsed' : ''}" data-folder="${escapeAttr(folder)}">
+        <div class="folder-header" onclick="toggleFolder('collapsedImgFolders', '${escapeAttr(folder)}')">
+          <span class="folder-chev">▼</span>
           <span class="folder-name">${escapeHtml(label)}</span>
           <span class="folder-count">${items.length}</span>
-          <div class="folder-actions">
+          <div class="folder-actions" onclick="event.stopPropagation()">
             <button class="btn-mini" onclick="selectFolder('${escapeAttr(folder)}', true)">Select</button>
             <button class="btn-mini" onclick="selectFolder('${escapeAttr(folder)}', false)">Deselect</button>
           </div>
@@ -732,6 +988,8 @@ function renderImages() {
                  data-path="${escapeAttr(img.path)}"
                  onclick="toggleSelect('${escapeAttr(img.path)}', event)">
               <img src="${escapeAttr(img.url)}" alt="" loading="lazy">
+              <button type="button" class="thumb-preview-btn" title="Preview image"
+                      onclick="event.stopPropagation(); openImagePreview('${escapeAttr(img.url)}', '${escapeAttr(img.name)}')">⛶</button>
               <div class="thumb-name">${escapeHtml(img.name)}</div>
             </div>`).join("")}
         </div>
@@ -839,13 +1097,17 @@ function renderVideos() {
     return b.localeCompare(a, undefined, { numeric: true });
   });
 
+  ensureFolderCollapseState(folderKeys, "collapsedVidFolders");
+
   let html = "";
   for (const folder of folderKeys) {
     const items = groups.get(folder);
     const label = folder === "." ? "(root)" : folder;
+    const isCollapsed = state.collapsedVidFolders.has(folder);
     html += `
-      <div class="folder-group">
-        <div class="folder-header">
+      <div class="folder-group${isCollapsed ? ' collapsed' : ''}" data-folder="${escapeAttr(folder)}">
+        <div class="folder-header" onclick="toggleFolder('collapsedVidFolders', '${escapeAttr(folder)}')">
+          <span class="folder-chev">▼</span>
           <span class="folder-name">${escapeHtml(label)}</span>
           <span class="folder-count">${items.length}</span>
         </div>
@@ -875,8 +1137,22 @@ function closeVideoModal(ev) {
   v.removeAttribute("src");
   v.load();
 }
+
+function openImagePreview(url, name) {
+  $("modalImage").src = url;
+  $("modalImageCaption").textContent = name || "";
+  $("imageModal").classList.add("visible");
+}
+function closeImagePreview(ev) {
+  if (ev && ev.target.id !== "imageModal" && ev.target.className !== "modal-close") return;
+  $("imageModal").classList.remove("visible");
+  $("modalImage").removeAttribute("src");
+}
+
 document.addEventListener("keydown", e => {
-  if (e.key === "Escape" && $("videoModal").classList.contains("visible")) closeVideoModal({target: {id: "videoModal"}});
+  if (e.key !== "Escape") return;
+  if ($("videoModal").classList.contains("visible")) closeVideoModal({target: {id: "videoModal"}});
+  else if ($("imageModal").classList.contains("visible")) closeImagePreview({target: {id: "imageModal"}});
 });
 
 // ── generate ──
@@ -885,21 +1161,12 @@ async function doGenerate() {
   const prompt = $("fPrompt").value.trim();
   if (!prompt) { toast("Prompt is empty", "error"); return; }
 
-  const payload = {
+  const payload = Object.assign({}, collectFieldValues(), {
+    backend: state.activeBackend,
     prompt,
     negative: $("fNegative").value.trim(),
     images: [...state.selected],
-    width: parseInt($("fWidth").value) || 1280,
-    height: parseInt($("fHeight").value) || 720,
-    frames: parseInt($("fFrames").value) || 120,
-    fps: parseFloat($("fFps").value) || 24,
-    steps: parseInt($("fSteps").value) || 30,
-    cfg: parseFloat($("fCfg").value) || 3.5,
-    sampler: $("fSampler").value,
-    scheduler: $("fScheduler").value,
-    seed: $("fSeed").value.trim() || null,
-    boundary_step: $("fBoundary").value.trim() || null,
-  };
+  });
 
   $("generateBtn").disabled = true;
   $("generateBtn").innerHTML = '<span class="spinner"></span>Queueing…';
@@ -973,6 +1240,7 @@ async function clearJobs() {
 
 // ── refresh ──
 function refreshAll() {
+  loadBackends();
   loadImages();
   if ($("videosView").classList.contains("active")) loadVideos();
   refreshJobs();
@@ -988,7 +1256,12 @@ setInterval(() => {
   }
 }, 2500);
 
+// Track when the user edits the negative prompt so the backend switch doesn't
+// stomp on their text.
+$("fNegative").addEventListener("input", () => { state.negativeUserEdited = true; });
+
 // ── init ──
+loadBackends();
 loadImages();
 refreshJobs();
 

@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Z-Image Turbo</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0e0e10;
+    --surface: #1a1a1f;
+    --border: #2a2a32;
+    --accent: #6c5ce7;
+    --accent-hover: #7f70f0;
+    --text: #e8e8ec;
+    --text-dim: #88889a;
+    --radius: 12px;
+  }
+
+  html { font-size: 16px; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100dvh;
+    overflow-x: hidden;
+  }
+
+  .prompt-section {
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    gap: 16px;
+  }
+
+  h1 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--text-dim);
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  textarea {
+    flex: 1;
+    width: 100%;
+    min-height: 200px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-size: 1.1rem;
+    line-height: 1.6;
+    padding: 16px;
+    resize: none;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  textarea:focus {
+    border-color: var(--accent);
+  }
+
+  textarea::placeholder {
+    color: var(--text-dim);
+  }
+
+  .btn-generate {
+    flex-shrink: 0;
+    width: 100%;
+    padding: 18px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    border: none;
+    border-radius: var(--radius);
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .btn-generate:hover { background: var(--accent-hover); }
+  .btn-generate:active { transform: scale(0.98); }
+
+  .btn-generate:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .toolbar-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+
+  .btn-sm {
+    padding: 8px 16px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s;
+    -webkit-tap-highlight-color: transparent;
+    margin-left: auto;
+  }
+
+  .btn-sm:first-of-type { margin-left: auto; }
+  .btn-sm + .btn-sm { margin-left: 0; }
+
+  .btn-sm:hover {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+
+  .ratio-row {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .btn-ratio {
+    flex: 1;
+    padding: 10px 0;
+    font-size: 0.85rem;
+    font-weight: 600;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: border-color 0.2s, color 0.2s, background 0.2s;
+    -webkit-tap-highlight-color: transparent;
+    text-align: center;
+  }
+
+  .btn-ratio:hover {
+    border-color: var(--accent);
+    color: var(--text);
+  }
+
+  .btn-ratio.active {
+    border-color: var(--accent);
+    background: var(--accent);
+    color: #fff;
+  }
+
+  /* ── modal overlay ── */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(4px);
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+  }
+
+  .modal-overlay.visible { display: flex; }
+
+  .modal {
+    width: 100%;
+    max-width: 420px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .modal h2 {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .modal input[type="text"] {
+    width: 100%;
+    padding: 12px;
+    font-size: 1rem;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .modal input[type="text"]:focus { border-color: var(--accent); }
+  .modal input[type="text"]::placeholder { color: var(--text-dim); }
+
+  .modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+  }
+
+  .modal-actions button {
+    padding: 10px 22px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    border-radius: 8px;
+    cursor: pointer;
+    border: none;
+    transition: background 0.2s;
+  }
+
+  .modal-btn-cancel {
+    background: var(--bg);
+    color: var(--text-dim);
+    border: 1px solid var(--border) !important;
+  }
+
+  .modal-btn-cancel:hover { color: var(--text); }
+
+  .modal-btn-ok {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  .modal-btn-ok:hover { background: var(--accent-hover); }
+
+  .prompt-list {
+    max-height: 280px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+  }
+
+  .prompt-list-item {
+    padding: 11px 14px;
+    font-size: 0.95rem;
+    cursor: pointer;
+    color: var(--text-dim);
+    transition: background 0.15s, color 0.15s;
+    border-bottom: 1px solid var(--border);
+    user-select: none;
+  }
+
+  .prompt-list-item:last-child { border-bottom: none; }
+
+  .prompt-list-item:hover { background: var(--surface); color: var(--text); }
+
+  .prompt-list-item.selected {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  .prompt-list-empty {
+    padding: 24px 14px;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 0.9rem;
+  }
+
+  .status {
+    text-align: center;
+    font-size: 0.9rem;
+    color: var(--text-dim);
+    min-height: 1.4em;
+    flex-shrink: 0;
+  }
+
+  .spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--text-dim);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .result-section {
+    display: none;
+    padding: 20px;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    padding-bottom: 40px;
+  }
+
+  .result-section.visible {
+    display: flex;
+  }
+
+  .result-image {
+    width: 100%;
+    max-width: 100%;
+    border-radius: var(--radius);
+    display: block;
+  }
+
+  .btn-download {
+    width: 100%;
+    max-width: 500px;
+    padding: 16px;
+    font-size: 1.05rem;
+    font-weight: 600;
+    border: 2px solid var(--accent);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--accent);
+    cursor: pointer;
+    transition: background 0.2s, color 0.2s;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .btn-download:hover {
+    background: var(--accent);
+    color: #fff;
+  }
+
+  .error {
+    color: #ff6b6b;
+  }
+
+  @media (min-width: 768px) {
+    .prompt-section { padding: 40px 10%; }
+    .result-section { padding: 40px 10%; }
+    textarea { font-size: 1.2rem; }
+  }
+</style>
+</head>
+<body>
+
+<section class="prompt-section">
+  <h1>Z-Image Turbo</h1>
+  <textarea id="prompt" placeholder="Describe the image you want to generate..." autofocus></textarea>
+  <div class="ratio-row">
+    <button class="btn-ratio active" data-w="768" data-h="1344" onclick="pickRatio(this)">9:16</button>
+    <button class="btn-ratio" data-w="1024" data-h="1024" onclick="pickRatio(this)">1:1</button>
+    <button class="btn-ratio" data-w="1344" data-h="768" onclick="pickRatio(this)">16:9</button>
+  </div>
+  <div class="toolbar-row">
+    <button class="btn-sm" onclick="openSaveModal()">Save Prompt</button>
+    <button class="btn-sm" onclick="openLoadModal()">Load Prompt</button>
+  </div>
+  <p class="status" id="status"></p>
+  <button class="btn-generate" id="generateBtn" onclick="doGenerate()">Generate</button>
+</section>
+
+<section class="result-section" id="resultSection">
+  <img class="result-image" id="resultImage" alt="Generated image">
+  <a id="downloadLink" download>
+    <button class="btn-download">Save Image</button>
+  </a>
+</section>
+
+<!-- Save modal -->
+<div class="modal-overlay" id="saveOverlay">
+  <div class="modal">
+    <h2>Save Prompt</h2>
+    <input type="text" id="saveNameInput" placeholder="Enter a name…">
+    <div class="modal-actions">
+      <button class="modal-btn-cancel" onclick="closeSave()">Cancel</button>
+      <button class="modal-btn-ok" onclick="doSave()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Load modal -->
+<div class="modal-overlay" id="loadOverlay">
+  <div class="modal">
+    <h2>Load Prompt</h2>
+    <div class="prompt-list" id="promptList"></div>
+    <div class="modal-actions">
+      <button class="modal-btn-cancel" onclick="closeLoad()">Cancel</button>
+      <button class="modal-btn-ok" id="loadOkBtn" onclick="doLoad()">OK</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const promptEl    = document.getElementById("prompt");
+const statusEl    = document.getElementById("status");
+const btn         = document.getElementById("generateBtn");
+const resultSec   = document.getElementById("resultSection");
+const resultImg   = document.getElementById("resultImage");
+const downloadLnk = document.getElementById("downloadLink");
+
+let genWidth = 768, genHeight = 1344;
+
+function pickRatio(el) {
+  document.querySelectorAll(".btn-ratio").forEach(b => b.classList.remove("active"));
+  el.classList.add("active");
+  genWidth = parseInt(el.dataset.w);
+  genHeight = parseInt(el.dataset.h);
+}
+
+promptEl.addEventListener("keydown", e => {
+  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") doGenerate();
+});
+
+async function doGenerate() {
+  const prompt = promptEl.value.trim();
+  if (!prompt) { statusEl.textContent = "Please enter a prompt."; return; }
+
+  btn.disabled = true;
+  statusEl.innerHTML = '<span class="spinner"></span>Generating…';
+
+  try {
+    const res = await fetch("/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt, width: genWidth, height: genHeight }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) {
+      statusEl.innerHTML = '<span class="error">Error: ' + (data.error || "Unknown error") + '</span>';
+      return;
+    }
+
+    resultImg.src = "data:image/png;base64," + data.image;
+    downloadLnk.href = "/download/" + encodeURIComponent(data.filename);
+    downloadLnk.download = data.filename;
+
+    statusEl.textContent = "";
+    resultSec.classList.add("visible");
+
+    setTimeout(() => {
+      resultSec.scrollIntoView({ behavior: "smooth" });
+    }, 100);
+
+  } catch (err) {
+    statusEl.innerHTML = '<span class="error">Network error: ' + err.message + '</span>';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/* ── Save prompt ── */
+const saveOverlay = document.getElementById("saveOverlay");
+const saveNameInput = document.getElementById("saveNameInput");
+
+function openSaveModal() {
+  saveNameInput.value = "";
+  saveOverlay.classList.add("visible");
+  setTimeout(() => saveNameInput.focus(), 50);
+}
+
+function closeSave() { saveOverlay.classList.remove("visible"); }
+
+saveNameInput.addEventListener("keydown", e => {
+  if (e.key === "Enter") doSave();
+  if (e.key === "Escape") closeSave();
+});
+
+saveOverlay.addEventListener("click", e => {
+  if (e.target === saveOverlay) closeSave();
+});
+
+async function doSave() {
+  const name = saveNameInput.value.trim();
+  const text = promptEl.value.trim();
+  if (!name) return;
+  if (!text) { statusEl.textContent = "Nothing to save — prompt is empty."; closeSave(); return; }
+
+  try {
+    const res = await fetch("/prompts/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, text }),
+    });
+    const data = await res.json();
+    if (!res.ok) { statusEl.innerHTML = '<span class="error">' + (data.error || "Save failed") + '</span>'; }
+    else { statusEl.textContent = 'Prompt saved as "' + name + '"'; }
+  } catch (err) {
+    statusEl.innerHTML = '<span class="error">Save error: ' + err.message + '</span>';
+  }
+  closeSave();
+}
+
+/* ── Load prompt ── */
+const loadOverlay = document.getElementById("loadOverlay");
+const promptListEl = document.getElementById("promptList");
+const loadOkBtn = document.getElementById("loadOkBtn");
+let _selectedPrompt = null;
+
+function selectItem(el, name) {
+  promptListEl.querySelectorAll(".prompt-list-item").forEach(i => i.classList.remove("selected"));
+  el.classList.add("selected");
+  _selectedPrompt = name;
+}
+
+async function openLoadModal() {
+  _selectedPrompt = null;
+  promptListEl.innerHTML = '<div class="prompt-list-empty">Loading…</div>';
+  loadOverlay.classList.add("visible");
+
+  try {
+    const res = await fetch("/prompts/list");
+    const data = await res.json();
+    const names = data.prompts || [];
+
+    if (names.length === 0) {
+      promptListEl.innerHTML = '<div class="prompt-list-empty">No saved prompts yet.</div>';
+      return;
+    }
+
+    promptListEl.innerHTML = "";
+    names.forEach(name => {
+      const div = document.createElement("div");
+      div.className = "prompt-list-item";
+      div.textContent = name;
+      div.addEventListener("click", () => selectItem(div, name));
+      div.addEventListener("dblclick", () => { selectItem(div, name); doLoad(); });
+      promptListEl.appendChild(div);
+    });
+  } catch (err) {
+    promptListEl.innerHTML = '<div class="prompt-list-empty">Failed to load list.</div>';
+  }
+}
+
+function closeLoad() { loadOverlay.classList.remove("visible"); }
+
+loadOverlay.addEventListener("click", e => {
+  if (e.target === loadOverlay) closeLoad();
+});
+
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && loadOverlay.classList.contains("visible")) closeLoad();
+});
+
+async function doLoad() {
+  if (!_selectedPrompt) return;
+
+  try {
+    const res = await fetch("/prompts/load", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: _selectedPrompt }),
+    });
+    const data = await res.json();
+    if (!res.ok) { statusEl.innerHTML = '<span class="error">' + (data.error || "Load failed") + '</span>'; }
+    else { promptEl.value = data.text; statusEl.textContent = 'Loaded "' + _selectedPrompt + '"'; }
+  } catch (err) {
+    statusEl.innerHTML = '<span class="error">Load error: ' + err.message + '</span>';
+  }
+  closeLoad();
+}
+</script>
+</body>
+</html>

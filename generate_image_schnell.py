@@ -13,6 +13,7 @@ if _LOW_PRIORITY:
             ctypes.windll.kernel32.GetCurrentProcess(), 0x00004000)
     except Exception:
         pass
+    os.environ["CUDA_DEVICE_SCHEDULE"] = "YIELD"
 
 COMFY_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ComfyUI_windows_portable", "ComfyUI")
 sys.path.insert(0, COMFY_DIR)
@@ -22,7 +23,7 @@ import numpy as np
 from PIL import Image
 
 if _LOW_PRIORITY:
-    for _dll in ("cudart64_12.dll", "cudart64_110.dll"):
+    for _dll in ("cudart64_13.dll", "cudart64_12.dll", "cudart64_110.dll"):
         try:
             _cudart = ctypes.WinDLL(_dll)
             _cudart.cudaSetDeviceFlags(ctypes.c_uint(0x04))
@@ -37,12 +38,31 @@ import comfy.model_management
 import folder_paths
 
 MODELS_DIR = os.path.join(COMFY_DIR, "models")
-CHECKPOINT = os.path.join(MODELS_DIR, "checkpoints", "flux1-dev-fp8.safetensors")
+CHECKPOINT = os.path.join(MODELS_DIR, "checkpoints", "flux1-schnell-fp8.safetensors")
 OUTPUT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "output", "images")
 
 
+def ensure_checkpoint():
+    if os.path.isfile(CHECKPOINT):
+        return
+    print("flux1-schnell-fp8.safetensors not found. Downloading from HuggingFace (~17 GB)...")
+    from huggingface_hub import hf_hub_download
+    hf_hub_download(
+        repo_id="Comfy-Org/flux1-schnell",
+        filename="flux1-schnell-fp8.safetensors",
+        local_dir=os.path.dirname(CHECKPOINT),
+    )
+    if not os.path.isfile(CHECKPOINT):
+        raise FileNotFoundError(
+            f"Download failed. Please manually download flux1-schnell-fp8.safetensors "
+            f"and place it in:\n  {os.path.dirname(CHECKPOINT)}"
+        )
+    print("Download complete.\n")
+
+
 def load_models():
-    print("Loading FLUX.1 Dev FP8 checkpoint...")
+    ensure_checkpoint()
+    print("Loading FLUX.1 Schnell FP8 checkpoint...")
     model, clip, vae = comfy.sd.load_checkpoint_guess_config(
         CHECKPOINT, output_vae=True, output_clip=True,
         embedding_directory=folder_paths.get_folder_paths("embeddings"),
@@ -80,7 +100,7 @@ def generate(model, clip, vae, prompt, width, height, steps, sampler_name, sched
 def make_output_path(suffix=""):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     ts = time.strftime("%Y%m%d_%H%M%S")
-    return os.path.join(OUTPUT_DIR, f"flux_{ts}{suffix}.png")
+    return os.path.join(OUTPUT_DIR, f"schnell_{ts}{suffix}.png")
 
 
 def parse_input(user_input):
@@ -102,7 +122,7 @@ def parse_input(user_input):
 
 def run_interactive(model, clip, vae, args):
     print("=" * 60)
-    print("  FLUX.1 Dev FP8 — Interactive Mode")
+    print("  FLUX.1 Schnell FP8 — Interactive Mode")
     print(f"  Resolution: {args.width}x{args.height}  Steps: {args.steps}")
     print(f"  Sampler: {args.sampler}/{args.scheduler}")
     print("=" * 60)
@@ -149,7 +169,7 @@ def run_interactive(model, clip, vae, args):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="FLUX.1 Dev FP8 — Text to Image (interactive or single-shot)")
+        description="FLUX.1 Schnell FP8 — Text to Image (interactive or single-shot)")
     parser.add_argument("prompt", type=str, nargs="?", default=None,
                         help="Text prompt for single-shot mode (or use --prompt-file)")
     parser.add_argument("--prompt-file", type=str, default=None,
@@ -158,12 +178,12 @@ def main():
                         help="Interactive mode: load models once, then accept prompts in a loop")
     parser.add_argument("--width", type=int, default=704, help="Image width (default: 704)")
     parser.add_argument("--height", type=int, default=1280, help="Image height (default: 1280)")
-    parser.add_argument("--steps", type=int, default=20, help="Sampling steps (default: 20)")
+    parser.add_argument("--steps", type=int, default=4, help="Sampling steps (default: 4)")
     parser.add_argument("--sampler", type=str, default="euler", help="Sampler (default: euler)")
     parser.add_argument("--scheduler", type=str, default="simple", help="Scheduler (default: simple)")
     parser.add_argument("--seed", type=int, default=None, help="Seed (default: random)")
     parser.add_argument("--output", type=str, default=None,
-                        help="Output path (default: output/images/flux_TIMESTAMP.png)")
+                        help="Output path (default: output/images/schnell_TIMESTAMP.png)")
     parser.add_argument("--low-priority", action="store_true",
                         help="Reduce CPU/GPU priority so other applications stay responsive")
     args = parser.parse_args()
